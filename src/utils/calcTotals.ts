@@ -14,7 +14,7 @@ export async function fetchTotals(path: string) {
 
   let votersSum = 0, candASum = 0, candBSum = 0, done = 0;
 
-  data.forEach(r => {
+  data.forEach((r: any) => {
     const v = Number(r.voters);
     const a = Number(r.cand1_pct);
     const b = Number(r.cand2_pct);
