@@ -61,8 +61,6 @@ def crawl_once():
     if not all([UPSTASH_REDIS_ENDPOINT, UPSTASH_REDIS_PORT, UPSTASH_REDIS_PASSWORD]):
         print("Error: Upstash Redis connection details (endpoint, port, password) are not fully configured in environment variables.")
         print(f"Endpoint: {UPSTASH_REDIS_ENDPOINT}, Port: {UPSTASH_REDIS_PORT}, Password Set: {'Yes' if UPSTASH_REDIS_PASSWORD else 'No'}")
-        # 환경 변수가 없으면 데이터 푸시를 시도하지 않고 종료하거나, 오류를 발생시킬 수 있습니다.
-        # 여기서는 오류를 발생시켜 GitHub Action에서 문제를 인지하도록 합니다.
         raise ValueError("Missing Upstash Redis credentials in environment variables.")
 
     with sync_playwright() as p:
@@ -77,41 +75,58 @@ def crawl_once():
                 viewport={'width': 1280, 'height': 1024} 
             )
             page = context.new_page()
-            page.set_default_timeout(30_000)
+            page.set_default_timeout(30_000) # 기본 타임아웃 30초
 
             target_page_url = "http://info.nec.go.kr/main/showDocument.xhtml?electionId=0020250402&topMenuId=VC&secondMenuId=VCCP08"
             print(f"Step 1: Navigating to target page: {target_page_url}")
             page.goto(target_page_url, wait_until="domcontentloaded", timeout=60_000)
             print("Step 1: Target page navigation completed.")
-            page.wait_for_timeout(1000)
+            # page.wait_for_timeout(1000) # 명시적인 대기로 대체 예정
 
-            
-            election_type_selector = "text=교육감선거" # 예시: 텍스트 기반 선택자
+            # --- "교육감선거" 탭 클릭 로직 수정 ---
+            election_type_selector = "#electionId11" # 고유 ID 사용
             
             print(f"Step 1.5: Clicking on election type tab: '{election_type_selector}'")
             try:
-                page.locator(election_type_selector).click(timeout=20000) # 20초 동안 기다림
+                # 해당 요소가 클릭 가능할 때까지 기다린 후 클릭합니다.
+                page.locator(election_type_selector).wait_for(state="visible", timeout=15000) # 15초간 visible 상태 기다림
+                page.locator(election_type_selector).click(timeout=10000) # 10초 내 클릭 시도
                 print("Step 1.5: Election type tab clicked.")
-                # 탭 클릭 후 내용이 로드될 때까지 잠시 기다리거나, 특정 요소가 나타날 때까지 기다립니다.
-                page.wait_for_timeout(3000) # 예: 3초 대기 (더 나은 방법은 특정 요소 기다리기)
-            except TimeoutError:
-                print(f"Timeout clicking on election type tab '{election_type_selector}'. Saving current page state.")
-                page.screenshot(path=os.path.join(screenshot_dir, f"error_election_type_click_timeout_{timestamp}.png"), full_page=True)
+                
+                # 탭 클릭 후 다음 단계의 요소("시도" 드롭다운)가 나타날 때까지 기다립니다.
+                sido_dropdown_selector = "select#cityCode"
+                print(f"Waiting for '{sido_dropdown_selector}' to be visible after election type click...")
+                page.wait_for_selector(sido_dropdown_selector, state="visible", timeout=15000)
+                print(f"'{sido_dropdown_selector}' is now visible.")
+            except TimeoutError as e:
+                print(f"Timeout interacting with election type tab '{election_type_selector}' or waiting for sido dropdown: {e}")
+                screenshot_path = os.path.join(screenshot_dir, f"error_election_or_sido_interaction_timeout_{timestamp}.png")
+                if page:
+                    page.screenshot(path=screenshot_path, full_page=True)
+                    print(f"Screenshot saved to {screenshot_path}")
                 raise
             except Exception as e:
-                print(f"Error clicking on election type tab '{election_type_selector}': {e}")
-                page.screenshot(path=os.path.join(screenshot_dir, f"error_election_type_click_exception_{timestamp}.png"), full_page=True)
+                print(f"Error interacting with election type tab '{election_type_selector}' or waiting for sido dropdown: {e}")
+                screenshot_path = os.path.join(screenshot_dir, f"error_election_or_sido_interaction_exception_{timestamp}.png")
+                if page:
+                    page.screenshot(path=screenshot_path, full_page=True)
+                    print(f"Screenshot saved to {screenshot_path}")
                 raise
+            # --- "교육감선거" 탭 클릭 로직 수정 끝 ---
 
-            print("Step 2: Selecting '시도' dropdown (부산광역시)...")
-            page.select_option("select#cityCode", "2600")
+            print(f"Step 2: Selecting '시도' dropdown (부산광역시) using selector '{sido_dropdown_selector}'...")
+            page.select_option(sido_dropdown_selector, "2600")
             print("Step 2: '시도' (부산광역시) selected.")
-            page.wait_for_timeout(1000)
+            # 구시군 드롭다운이 로드될 시간을 주기 위해, 해당 요소가 나타날 때까지 기다리는 것이 더 좋습니다.
+            sgg_dropdown_selector = "select#sggCityCode"
+            print(f"Waiting for '{sgg_dropdown_selector}' to be ready...")
+            page.wait_for_selector(sgg_dropdown_selector, state="visible", timeout=10000) 
+            # page.wait_for_timeout(1000) # 위 명시적 대기로 대체 가능
 
-            print("Step 3: Selecting '구시군' dropdown (전체)...")
-            page.select_option("select#sggCityCode", "")
+            print(f"Step 3: Selecting '구시군' dropdown (전체) using selector '{sgg_dropdown_selector}'...")
+            page.select_option(sgg_dropdown_selector, "")
             print("Step 3: '구시군' (전체) selected.")
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(500) # 검색 버튼 클릭 전 짧은 대기
 
             print("Step 4: Clicking search button...")
             page.locator("span.btnSearch > a:has-text('검색')").click()
@@ -188,7 +203,6 @@ def crawl_once():
             )
             print("Step 8: Data push to Upstash Redis finished.")
         except Exception as e:
-            # 데이터 푸시 실패 시에도 오류를 기록하고 GitHub Action이 실패하도록 처리
             print(f"Error during data push to Upstash Redis: {e}")
             raise
     else:
