@@ -7,7 +7,7 @@ def crawl_once():
         page = browser.new_page()
 
         # STEP 1: 진입
-        page.goto("https://info.nec.go.kr/main/showDocument.xhtml?electionId=0020250402&topMenuId=VC&secondMenuId=VCCP08")
+        page.goto("http://info.nec.go.kr/main/showDocument.xhtml?electionId=0020250402&topMenuId=VC&secondMenuId=VCCP08")
 
         # STEP 2: 페이지 로딩 및 요소 기다리기
         page.wait_for_timeout(3000)  # JS가 드롭다운 그릴 시간 확보
