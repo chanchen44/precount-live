@@ -86,6 +86,8 @@ def crawl_once():
             page.wait_for_timeout(1000)
 
             
+            election_type_selector = "text=교육감선거" # 예시: 텍스트 기반 선택자
+            
             print(f"Step 1.5: Clicking on election type tab: '{election_type_selector}'")
             try:
                 page.locator(election_type_selector).click(timeout=20000) # 20초 동안 기다림
