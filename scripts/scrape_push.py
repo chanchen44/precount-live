@@ -85,6 +85,22 @@ def crawl_once():
             print("Step 1: Target page navigation completed.")
             page.wait_for_timeout(1000)
 
+            
+            print(f"Step 1.5: Clicking on election type tab: '{election_type_selector}'")
+            try:
+                page.locator(election_type_selector).click(timeout=20000) # 20초 동안 기다림
+                print("Step 1.5: Election type tab clicked.")
+                # 탭 클릭 후 내용이 로드될 때까지 잠시 기다리거나, 특정 요소가 나타날 때까지 기다립니다.
+                page.wait_for_timeout(3000) # 예: 3초 대기 (더 나은 방법은 특정 요소 기다리기)
+            except TimeoutError:
+                print(f"Timeout clicking on election type tab '{election_type_selector}'. Saving current page state.")
+                page.screenshot(path=os.path.join(screenshot_dir, f"error_election_type_click_timeout_{timestamp}.png"), full_page=True)
+                raise
+            except Exception as e:
+                print(f"Error clicking on election type tab '{election_type_selector}': {e}")
+                page.screenshot(path=os.path.join(screenshot_dir, f"error_election_type_click_exception_{timestamp}.png"), full_page=True)
+                raise
+
             print("Step 2: Selecting '시도' dropdown (부산광역시)...")
             page.select_option("select#cityCode", "2600")
             print("Step 2: '시도' (부산광역시) selected.")
