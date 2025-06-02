@@ -75,9 +75,7 @@ def crawl_once():
             
             election_type_selector = "#electionId11"
             sido_dropdown_selector = "select#cityCode"
-            # HTML 분석 결과에 따른 검색 버튼 선택자 수정
             search_button_selector = '#spanSubmit input[type="image"][alt="검색"]'
-
 
             print(f"Step 2: Clicking on election type tab: '{election_type_selector}'")
             try:
@@ -85,41 +83,48 @@ def crawl_once():
                 page.locator(election_type_selector).click(timeout=10000)
                 print("Step 2: Election type tab clicked.")
                 
-                print(f"Waiting for '{sido_dropdown_selector}' and '{search_button_selector}' to be ready after election type click...")
-                page.wait_for_selector(sido_dropdown_selector, state="visible", timeout=15000)
+                # "교육감선거" 탭 클릭 후 "시도" 드롭다운과 "검색" 버튼이 모두 나타날 때까지 기다림
+                print(f"Waiting for '{sido_dropdown_selector}' and '{search_button_selector}' to be visible after election type click...")
+                page.wait_for_selector(sido_dropdown_selector, state="visible", timeout=15000) # 시도 드롭다운 visible 확인
                 print(f"'{sido_dropdown_selector}' is now visible.")
-                page.locator(search_button_selector).wait_for(state="visible", timeout=15000)
-                page.locator(search_button_selector).wait_for(state="enabled", timeout=15000)
-                print(f"'{search_button_selector}' is now visible and enabled.")
+                
+                # 검색 버튼이 visible 상태인지 확인 (enabled는 click 시 Playwright가 내부적으로 어느정도 체크함)
+                page.locator(search_button_selector).wait_for(state="visible", timeout=15000) 
+                print(f"'{search_button_selector}' is now visible.")
+
             except TimeoutError as e:
                 print(f"Timeout during Step 2 (election type click or initial element visibility): {e}")
                 screenshot_path = os.path.join(screenshot_dir, f"error_step2_timeout_{timestamp}.png")
                 if page: page.screenshot(path=screenshot_path, full_page=True)
                 raise
-            except Exception as e:
-                print(f"Error during Step 2 (election type click or initial element visibility): {e}")
+            except Exception as e: # Exception을 좀 더 구체적인 Playwright 관련 예외로 바꾸는 것이 좋습니다.
+                print(f"Error during Step 2 (election type click or initial element visibility): {e}") # 오류 메시지에 어떤 state를 사용했는지 명시
                 screenshot_path = os.path.join(screenshot_dir, f"error_step2_exception_{timestamp}.png")
                 if page: page.screenshot(path=screenshot_path, full_page=True)
                 raise
 
+            # "시도" 드롭다운에서 "부산광역시" 선택
             print(f"Step 3: Selecting '시도' dropdown (부산광역시) using selector '{sido_dropdown_selector}'...")
             page.select_option(sido_dropdown_selector, "2600") 
             print("Step 3: '시도' (부산광역시) selected.")
             
-            # "부산광역시" 선택 후, 페이지가 업데이트될 수 있으므로 검색 버튼 상태 다시 확인 (필수는 아닐 수 있음, 하지만 안정성 위해)
-            print(f"Re-checking search button '{search_button_selector}' to be ready after '시도' selection...")
+            # "부산광역시" 선택 후, 페이지가 업데이트될 수 있으므로 검색 버튼을 클릭하기 전에
+            # 해당 버튼이 여전히 visible 한지 짧게 확인하거나, 잠시 고정된 시간 대기.
+            # 이 단계에서 검색 버튼이 사라지거나 변경되지 않는다는 가정하에 진행.
+            # 필요하다면, 여기서도 search_button_selector에 대해 wait_for(state="visible") 재시도.
+            print(f"Ensuring search button '{search_button_selector}' is still targetable after '시도' selection...")
             try:
-                page.locator(search_button_selector).wait_for(state="visible", timeout=10000)
-                page.locator(search_button_selector).wait_for(state="enabled", timeout=10000)
-                print("Search button is confirmed to be ready.")
-            except TimeoutError as e:
-                print(f"Timeout waiting for search button to be ready after '시도' selection: {e}")
-                screenshot_path = os.path.join(screenshot_dir, f"error_search_button_not_ready_after_sido_timeout_{timestamp}.png")
-                if page: page.screenshot(path=screenshot_path, full_page=True)
-                raise
-            
+                page.locator(search_button_selector).wait_for(state="visible", timeout=5000) # 짧게 확인
+                print("Search button is confirmed to be targetable.")
+            except TimeoutError:
+                print("Search button not immediately visible after '시도' selection, proceeding with click attempt anyway based on prior visibility.")
+                # 스크린샷을 찍고 오류를 발생시킬 수도 있지만, 일단 클릭을 시도해봅니다.
+                # page.screenshot(path=os.path.join(screenshot_dir, f"error_search_button_not_visible_final_check_timeout_{timestamp}.png"), full_page=True)
+                # raise
+
+            # "검색" 버튼 클릭
             print(f"Step 4: Clicking search button ('{search_button_selector}')...")
-            page.locator(search_button_selector).click(timeout=10000) # 클릭에도 타임아웃 추가
+            page.locator(search_button_selector).click(timeout=15000) # 클릭 타임아웃 증가
             print("Step 4: Search button clicked.")
 
             table_selector = "table#table01" 
