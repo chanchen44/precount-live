@@ -1,4 +1,5 @@
-playwright
-bs4
-pandas
-requests
+playwright>=1.30,<2
+beautifulsoup4>=4.10,<5
+lxml>=4.0,<5
+redis>=4.0,<5 # Upstash Redis 사용을 위해 추가
+# requests>=2.20,<3  # 필요시 주석 해제
