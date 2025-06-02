@@ -1,0 +1,17 @@
+name: scrape-nec
+on:
+  schedule:  # 1분마다
+    - cron: '*/1 * * * *'
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/playwright-github-action@v1
+      - name: Install deps
+        run: pip install playwright bs4 redis requests
+      - name: Scrape & push
+        env:
+          UP_URL: ${{ secrets.UP_URL }}
+          UP_TOKEN: ${{ secrets.UP_TOKEN }}
+        run: python scripts/scrape_push.py
