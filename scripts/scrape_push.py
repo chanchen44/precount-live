@@ -12,7 +12,7 @@ def crawl_once():
         )
 
         # ① 홈 이동
-        page.goto("https://info.nec.go.kr/", wait_until="domcontentloaded")
+        page.goto("http://info.nec.go.kr/", wait_until="domcontentloaded")
 
         # ② 상단-메뉴: [최근선거] 클릭
         page.click("text=최근선거")
