@@ -1,21 +1,42 @@
-# .github/workflows/scrape.yml
-name: scrape-nec
+name: scrape-nec-data
 on:
   schedule:
-    - cron: "*/30 * * * *"  # 매 30분마다 실행
-  workflow_dispatch:
-
+    - cron: '*/30 * * * *' # 30분마다 실행 (대상 웹사이트 부하 고려하여 조정)
+  workflow_dispatch:        # 수동 실행도 가능
 jobs:
-  run:
-    runs-on: ubuntu-22.04
+  run-scraper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
-      - name: Install Python deps & Playwright
+          python-version: '3.11'
+
+      - name: Install Python dependencies and Playwright browsers
         run: |
-          pip install playwright beautifulsoup4
-          python -m playwright install --with-deps
-      - name: Run scraper
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run scraping script
+        env:
+          # Upstash Redis 접속 정보 (스크립트에서 사용)
+          UPSTASH_REDIS_ENDPOINT: "shining-ringtail-14155.upstash.io" # 사용자님의 Endpoint
+          UPSTASH_REDIS_PORT: "6379" # 사용자님의 Port
+          UPSTASH_REDIS_PASSWORD: ${{ secrets.UPSTASH_REDIS_PASSWORD_TOKEN }} # GitHub Secrets에서 가져옴
+          # UP_URL: ${{ secrets.UP_URL }} # 기존 Upstash 관련 변수 (현재 Redis 직접 사용으로 불필요할 수 있음)
+          # UP_TOKEN: ${{ secrets.UP_TOKEN }} # 기존 Upstash 관련 변수 (현재 Redis 직접 사용으로 불필요할 수 있음)
         run: python scripts/scrape_push.py
+
+      - name: Upload Playwright screenshots if run failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-error-screenshots
+          path: playwright-screenshots/
+          retention-days: 7
