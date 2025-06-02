@@ -17,22 +17,15 @@ def push_to_upstash_redis(data, endpoint, port, password, key_name):
     print(f"Attempting to push data to Upstash Redis (Endpoint: {endpoint}, Key: {key_name})...")
     
     try:
-        # Upstash Redis 클라이언트 초기화
         r = redis.Redis(
             host=endpoint,
-            port=int(port), # 포트 번호는 정수형이어야 함
+            port=int(port),
             password=password,
-            ssl=True # Upstash Redis는 SSL/TLS 연결을 사용
+            ssl=True 
         )
-        
-        # 데이터 Ping 테스트 (연결 확인)
         r.ping()
         print("Successfully connected to Upstash Redis.")
-        
-        # Python 딕셔너리를 JSON 문자열로 변환
-        json_data = json.dumps(data, ensure_ascii=False) # 한글 깨짐 방지
-        
-        # Redis에 데이터 저장 (지정한 key_name 사용)
+        json_data = json.dumps(data, ensure_ascii=False)
         r.set(key_name, json_data)
         print(f"Data successfully pushed to Upstash Redis with key '{key_name}'.")
         
@@ -75,67 +68,65 @@ def crawl_once():
             page = context.new_page()
             page.set_default_timeout(30_000)
 
-            # --- 정확한 URL로 수정 ---
             target_page_url = "http://info.nec.go.kr/main/showDocument.xhtml?electionId=0020250402&topMenuId=VC&secondMenuId=VCCP09"
             print(f"Step 1: Navigating to target page: {target_page_url}")
             page.goto(target_page_url, wait_until="domcontentloaded", timeout=60_000)
             print("Step 1: Target page navigation completed.")
             
-            # "교육감선거" 탭 클릭
-            election_type_selector = "#electionId11" # 교육감선거 탭의 ID
+            election_type_selector = "#electionId11"
+            sido_dropdown_selector = "select#cityCode"
+            # HTML 분석 결과에 따른 검색 버튼 선택자 수정
+            search_button_selector = '#spanSubmit input[type="image"][alt="검색"]'
+
+
             print(f"Step 2: Clicking on election type tab: '{election_type_selector}'")
             try:
                 page.locator(election_type_selector).wait_for(state="visible", timeout=15000)
                 page.locator(election_type_selector).click(timeout=10000)
                 print("Step 2: Election type tab clicked.")
-                # "시도" 드롭다운이 나타날 때까지 기다림
-                sido_dropdown_selector = "select#cityCode"
-                print(f"Waiting for '{sido_dropdown_selector}' to be visible after election type click...")
+                
+                print(f"Waiting for '{sido_dropdown_selector}' and '{search_button_selector}' to be ready after election type click...")
                 page.wait_for_selector(sido_dropdown_selector, state="visible", timeout=15000)
                 print(f"'{sido_dropdown_selector}' is now visible.")
+                page.locator(search_button_selector).wait_for(state="visible", timeout=15000)
+                page.locator(search_button_selector).wait_for(state="enabled", timeout=15000)
+                print(f"'{search_button_selector}' is now visible and enabled.")
             except TimeoutError as e:
-                print(f"Timeout interacting with election type tab '{election_type_selector}' or waiting for sido dropdown: {e}")
-                screenshot_path = os.path.join(screenshot_dir, f"error_election_or_sido_interaction_timeout_{timestamp}.png")
+                print(f"Timeout during Step 2 (election type click or initial element visibility): {e}")
+                screenshot_path = os.path.join(screenshot_dir, f"error_step2_timeout_{timestamp}.png")
                 if page: page.screenshot(path=screenshot_path, full_page=True)
                 raise
             except Exception as e:
-                print(f"Error interacting with election type tab '{election_type_selector}' or waiting for sido dropdown: {e}")
-                screenshot_path = os.path.join(screenshot_dir, f"error_election_or_sido_interaction_exception_{timestamp}.png")
+                print(f"Error during Step 2 (election type click or initial element visibility): {e}")
+                screenshot_path = os.path.join(screenshot_dir, f"error_step2_exception_{timestamp}.png")
                 if page: page.screenshot(path=screenshot_path, full_page=True)
                 raise
 
-            # "시도" 드롭다운에서 "부산광역시" 선택
             print(f"Step 3: Selecting '시도' dropdown (부산광역시) using selector '{sido_dropdown_selector}'...")
-            page.select_option(sido_dropdown_selector, "2600") # 부산광역시 값
+            page.select_option(sido_dropdown_selector, "2600") 
             print("Step 3: '시도' (부산광역시) selected.")
             
-            # "부산광역시" 선택 후, 페이지가 업데이트되고 "검색" 버튼이 상호작용 가능해질 때까지 잠시 대기하거나, 
-            # 검색 버튼 자체가 visible/enabled 상태가 되기를 기다립니다.
-            # 여기서는 검색 버튼을 바로 클릭 시도하기 전에 해당 버튼이 준비되기를 기다립니다.
-            search_button_selector = "span.btnSearch > a:has-text('검색')" # 검색 버튼 선택자
-            print(f"Waiting for search button '{search_button_selector}' to be ready...")
+            # "부산광역시" 선택 후, 페이지가 업데이트될 수 있으므로 검색 버튼 상태 다시 확인 (필수는 아닐 수 있음, 하지만 안정성 위해)
+            print(f"Re-checking search button '{search_button_selector}' to be ready after '시도' selection...")
             try:
                 page.locator(search_button_selector).wait_for(state="visible", timeout=10000)
                 page.locator(search_button_selector).wait_for(state="enabled", timeout=10000)
-                print("Search button is ready.")
+                print("Search button is confirmed to be ready.")
             except TimeoutError as e:
-                print(f"Timeout waiting for search button to be ready: {e}")
-                screenshot_path = os.path.join(screenshot_dir, f"error_search_button_not_ready_timeout_{timestamp}.png")
+                print(f"Timeout waiting for search button to be ready after '시도' selection: {e}")
+                screenshot_path = os.path.join(screenshot_dir, f"error_search_button_not_ready_after_sido_timeout_{timestamp}.png")
                 if page: page.screenshot(path=screenshot_path, full_page=True)
                 raise
-
-            # "검색" 버튼 클릭
+            
             print(f"Step 4: Clicking search button ('{search_button_selector}')...")
-            page.locator(search_button_selector).click()
+            page.locator(search_button_selector).click(timeout=10000) # 클릭에도 타임아웃 추가
             print("Step 4: Search button clicked.")
 
-            # 결과 테이블 로딩 대기
-            table_selector = "table#table01" # 결과 테이블 선택자
+            table_selector = "table#table01" 
             print(f"Step 5: Waiting for table ('{table_selector}') to load after search...")
             page.wait_for_selector(table_selector, timeout=60_000)
             print("Step 5: Result table loaded.")
 
-            # HTML 추출 및 파싱
             print(f"Step 6: Extracting HTML from '{table_selector}'...")
             html = page.inner_html(table_selector)
             print("Step 6: HTML extraction completed.")
