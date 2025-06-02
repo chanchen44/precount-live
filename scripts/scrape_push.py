@@ -18,7 +18,7 @@ def crawl_once():
         page.click("text=최근선거")
 
         # ③ 상단 탭: [두-개표] 클릭
-        page.click("text=두-개표")          # 메뉴에 정확히 표시된 텍스트 확인
+        page.click("text=투·개표")          # 메뉴에 정확히 표시된 텍스트 확인
 
         # ④ 왼쪽 사이드메뉴: [개표단위별 개표결과]
         page.click("text=개표단위별 개표결과")
