@@ -10,7 +10,8 @@ export type PrecinctRow = {
 export async function fetchTotals(path: string) {
   const res = await fetch(path);
   const text = await res.text();
-  const { data } = Papa.parse<PrecinctRow>(text, { header: true });
+  const { data } = (Papa.parse(text, { header: true }) as any) as { data: PrecinctRow[] };
+
 
   let votersSum = 0, candASum = 0, candBSum = 0, done = 0;
 
