@@ -1,16 +1,28 @@
 name: scrape-nec
 on:
-  schedule:  # 1분마다
-    - cron: '*/1 * * * *'
+  schedule:
+    - cron: '*/2 * * * *'           # 2분마다
+  workflow_dispatch:                # 수동 실행도 가능
 jobs:
   run:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest          # 최신 런너 그대로 OK
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: microsoft/playwright-github-action@v1
-      - name: Install deps
-        run: pip install playwright bs4 redis requests
-      - name: Scrape & push
+
+      # ▶ 파이썬 준비
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # ▶ 의존성 설치 + Playwright 브라우저 deps 설치
+      - name: Install Python deps & Playwright
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      # ▶ 크롤링 스크립트 실행 (Upstash push)
+      - name: Run scraper
         env:
           UP_URL: ${{ secrets.UP_URL }}
           UP_TOKEN: ${{ secrets.UP_TOKEN }}
