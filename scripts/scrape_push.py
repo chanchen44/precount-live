@@ -26,7 +26,6 @@ def push_to_upstash_redis(data, endpoint, port, password, key_name):
         )
         r.ping()
         print(f"Successfully connected to Upstash Redis for key '{key_name}'.")
-        # datetime 객체가 있다면 문자열로 변환
         json_data = json.dumps(data, ensure_ascii=False, default=str) 
         r.set(key_name, json_data)
         print(f"Data successfully pushed to Upstash Redis with key '{key_name}'.")
@@ -52,7 +51,7 @@ def calculate_final_results(scraped_data_from_redis):
     timestamp = scraped_data_from_redis.get("timestamp")
     candidate_names = scraped_data_from_redis.get("candidates")
     sigungu_data_list = scraped_data_from_redis.get("data")
-    summary_data = scraped_data_from_redis.get("summary", {}) # 합계 행 데이터
+    summary_data = scraped_data_from_redis.get("summary", {})
 
     if not candidate_names or not sigungu_data_list:
         print("Error: Candidate names or sigungu data is missing for calculation.")
@@ -60,12 +59,9 @@ def calculate_final_results(scraped_data_from_redis):
 
     print(f"Calculating final results for candidates: {candidate_names} based on data from {timestamp}")
     
-    # 1. 총 투표수 (합계 행에서 가져오기 - 실제 집계된 값)
     total_actual_votes = int(str(summary_data.get("투표수", "0")).replace(',', ''))
-
-    # 2. 후보자별 예상 득표수 및 예상 무효표 계산
     projected_votes_by_candidate = {name: 0.0 for name in candidate_names}
-    projected_invalid_votes_total = 0.0 # 예상 무효표 총합
+    projected_invalid_votes_total = 0.0
     overall_total_eligible_voters_for_projection = 0 
 
     for sigungu in sigungu_data_list:
@@ -73,7 +69,7 @@ def calculate_final_results(scraped_data_from_redis):
             sigungu_name = sigungu.get('구시군명', 'N/A')
             eligible_voters_sigungu = int(str(sigungu.get("선거인수", "0")).replace(',', ''))
             votes_cast_sigungu_actual = int(str(sigungu.get("투표수", "0")).replace(',', ''))
-            invalid_votes_sigungu_actual = int(str(sigungu.get("무효투표수", "0")).replace(',', '')) # 시군구별 실제 무효표
+            invalid_votes_sigungu_actual = int(str(sigungu.get("무효투표수", "0")).replace(',', ''))
             
             overall_total_eligible_voters_for_projection += eligible_voters_sigungu
 
@@ -81,14 +77,12 @@ def calculate_final_results(scraped_data_from_redis):
                 print(f"Warning: Actual votes cast is 0 for {sigungu_name}. Skipping projection for this sigungu.")
                 continue
 
-            # 후보자별 예상 득표수 계산
             for cand_name in candidate_names:
                 candidate_votes_sigungu_actual = int(str(sigungu.get(cand_name, "0")).replace(',', ''))
                 vote_share_in_sigungu = candidate_votes_sigungu_actual / votes_cast_sigungu_actual
                 projected_votes_for_candidate_in_sigungu = vote_share_in_sigungu * eligible_voters_sigungu
                 projected_votes_by_candidate[cand_name] += projected_votes_for_candidate_in_sigungu
             
-            # 시군구별 예상 무효표 계산
             invalid_vote_share_in_sigungu = invalid_votes_sigungu_actual / votes_cast_sigungu_actual
             projected_invalid_votes_sigungu = invalid_vote_share_in_sigungu * eligible_voters_sigungu
             projected_invalid_votes_total += projected_invalid_votes_sigungu
@@ -105,22 +99,21 @@ def calculate_final_results(scraped_data_from_redis):
     
     projected_invalid_votes_total = round(projected_invalid_votes_total)
 
-    # 3. 개표율 (합계 행에서 가져오기)
     overall_turnout_rate_str = str(summary_data.get("개표율", "0")).replace('%', '').strip()
     overall_turnout_rate = float(overall_turnout_rate_str) if overall_turnout_rate_str else 0.0
 
     final_results = {
         "timestamp": timestamp,
-        "total_actual_votes": total_actual_votes, # 실제 집계된 총 투표수
+        "total_actual_votes": total_actual_votes,
         "projected_votes_by_candidate": projected_votes_by_candidate,
-        "projected_invalid_votes": projected_invalid_votes_total, # 계산된 예상 무효표
-        "overall_turnout_rate_percent": overall_turnout_rate, # 실제 집계된 전체 개표율
+        "projected_invalid_votes": projected_invalid_votes_total,
+        "overall_turnout_rate_percent": overall_turnout_rate,
         "calculation_info": {
             "candidate_projection_method": "Sum_for_each_candidate_over_sigungus_of ((candidate_actual_votes_in_sigungu / total_actual_votes_in_sigungu) * eligible_voters_in_sigungu)",
             "invalid_vote_projection_method": "Sum_over_sigungus_of ((sigungu_actual_invalid_votes / sigungu_total_actual_votes) * sigungu_eligible_voters)",
             "total_eligible_voters_used_for_projection": overall_total_eligible_voters_for_projection,
             "source_overall_actual_votes": summary_data.get("투표수", "N/A"),
-            "source_overall_actual_invalid_votes": summary_data.get("무효투표수", "N/A"), # 참고용 실제 집계 무효표
+            "source_overall_actual_invalid_votes": summary_data.get("무효투표수", "N/A"),
             "source_overall_turnout_rate": summary_data.get("개표율", "N/A")
         }
     }
@@ -142,9 +135,7 @@ def crawl_once():
     os.makedirs(screenshot_dir, exist_ok=True)
     current_utc_time = datetime.datetime.now(datetime.timezone.utc)
     execution_timestamp = current_utc_time.isoformat() 
-    # 스크린샷 파일명용 타임스탬프 (스크립트 실행 시점 기준)
     file_timestamp = current_utc_time.strftime("%Y%m%d-%H%M%S")
-
 
     if not all([UPSTASH_REDIS_ENDPOINT, UPSTASH_REDIS_PORT, UPSTASH_REDIS_PASSWORD]):
         print("Error: Upstash Redis connection details are not fully configured.")
@@ -228,61 +219,84 @@ def crawl_once():
             print("Step 7: Parsing HTML with BeautifulSoup...")
             soup = BeautifulSoup(html, "lxml")
             
-            thead = soup.find("thead")
-            if not thead: raise ValueError("Parsing Error: Could not find <thead> in the table HTML.")
-            header_rows_in_thead = thead.find_all("tr")
-            if len(header_rows_in_thead) < 2: raise ValueError("Parsing Error: Expected at least 2 header rows for candidates in <thead>.")
-
+            # --- 후보자 이름 추출 로직 변경 ---
             candidate_names = []
-            candidate_header_ths = header_rows_in_thead[1].find_all("th") 
-            candidate_th_start_index = 3 
-            for th in candidate_header_ths[candidate_th_start_index:]:
-                name = th.get_text(strip=True)
-                if name == "계": break
-                if name: candidate_names.append(name)
-            
-            if not candidate_names:
-                raise ValueError("Critical Parsing Error: Candidate names could not be extracted from table subheader.")
-            print(f"Dynamically extracted candidate names: {candidate_names}")
-            
             tbody = soup.find("tbody")
             if not tbody: raise ValueError("Parsing Error: Could not find <tbody> in the table HTML.")
             
+            first_tr_in_tbody = tbody.find("tr") # <tbody>의 첫 번째 <tr> (후보자 이름 포함된 행)
+            if not first_tr_in_tbody: 
+                raise ValueError("Parsing Error: Could not find the first row in <tbody> for candidate names.")
+            
+            # <td> 태그들을 순회하며 <strong> 태그 안의 텍스트를 후보자 이름으로 간주
+            # HTML 구조상 후보자 이름은 특정 class="alignC"를 가진 <td> 안에 strong 태그로 있음
+            # "계" 이전까지의 strong 태그 텍스트를 가져옴
+            candidate_tds = first_tr_in_tbody.find_all("td", class_="alignC")
+            for td_cand in candidate_tds:
+                strong_tag = td_cand.find("strong")
+                if strong_tag:
+                    name = strong_tag.get_text(strip=True)
+                    if name == "계": # "계" 컬럼은 후보자가 아님
+                        break
+                    if name: # 이름이 비어있지 않으면 추가
+                        candidate_names.append(name)
+            
+            if not candidate_names:
+                # 만약 위 방식으로 못찾으면, thead의 두번째 tr의 th에서 다시 시도 (이전 방식 - fallback은 아님, 구조가 명확하므로)
+                # 이 부분은 제공해주신 HTML 구조에 따라 tbody에서 가져오는 것이 맞음.
+                raise ValueError("Critical Parsing Error: Candidate names could not be extracted from the first row of <tbody>.")
+            print(f"Dynamically extracted candidate names: {candidate_names}")
+            
+            # --- 데이터 행 및 합계 행 파싱 로직 수정 ---
             sigungu_data_list = []
             summary_row_data = {} 
-            data_rows = tbody.find_all("tr")
+            data_rows = tbody.find_all("tr") 
             
-            if not data_rows: raise ValueError("Parsing Error: No data rows found in tbody.")
+            if len(data_rows) < 2: # 최소 후보자명 행 + 합계 행
+                raise ValueError("Parsing Error: Not enough rows in tbody to get summary and data.")
 
-            for tr_idx, tr in enumerate(data_rows):
+            # 합계 행은 tbody의 두 번째 tr로 가정 (첫 번째 tr은 후보자 이름용)
+            summary_tr = data_rows[1] 
+            summary_cols_td = summary_tr.find_all("td")
+            summary_row_values = [td.get_text(strip=True) for td in summary_cols_td]
+
+            if summary_row_values and summary_row_values[0] == "합계":
+                print(f"Found summary row: {summary_row_values}")
+                summary_row_data["구시군명"] = summary_row_values[0]
+                summary_row_data["선거인수"] = summary_row_values[1]
+                summary_row_data["투표수"] = summary_row_values[2]
+                # 후보자별 득표수 (합계)
+                for i, cand_name in enumerate(candidate_names):
+                    summary_row_data[cand_name] = summary_row_values[3 + i]
+                
+                summary_idx_offset = 3 + len(candidate_names)
+                if len(summary_row_values) > summary_idx_offset:
+                    summary_row_data["후보자계"] = summary_row_values[summary_idx_offset]
+                if len(summary_row_values) > summary_idx_offset + 1:
+                    summary_row_data["무효투표수"] = summary_row_values[summary_idx_offset + 1]
+                if len(summary_row_values) > summary_idx_offset + 2:
+                    summary_row_data["기권수"] = summary_row_values[summary_idx_offset + 2]
+                if len(summary_row_values) > summary_idx_offset + 3: 
+                    summary_row_data["개표율"] = summary_row_values[summary_idx_offset + 3]
+            else:
+                print("Warning: Could not parse the summary row (expected as the second row in tbody).")
+
+            # 실제 시군구 데이터는 tbody의 네 번째 tr부터 시작하며, 두 행씩 건너뛰며 숫자 데이터 행을 가져옴
+            # (첫번째 tr: 후보자명, 두번째 tr: 합계, 세번째 tr: 합계에 대한 득표율, 네번째 tr: 첫번째 시군구 데이터)
+            for tr_idx in range(3, len(data_rows), 2): # 3, 5, 7, ...
+                tr = data_rows[tr_idx]
                 cols_td = tr.find_all("td")
                 row_values_text = [td.get_text(strip=True) for td in cols_td]
 
-                if row_values_text and (row_values_text[0] == "합계" or (tr_idx == 0 and "합계" in row_values_text[0])): 
-                    print(f"Found summary row: {row_values_text}")
-                    summary_row_data["구시군명"] = row_values_text[0]
-                    summary_row_data["선거인수"] = row_values_text[1]
-                    summary_row_data["투표수"] = row_values_text[2]
-                    for i, cand_name in enumerate(candidate_names):
-                        summary_row_data[cand_name] = row_values_text[3 + i]
-                    
-                    summary_idx_offset = 3 + len(candidate_names)
-                    if len(row_values_text) > summary_idx_offset:
-                        summary_row_data["후보자계"] = row_values_text[summary_idx_offset]
-                    if len(row_values_text) > summary_idx_offset + 1:
-                        summary_row_data["무효투표수"] = row_values_text[summary_idx_offset + 1]
-                    if len(row_values_text) > summary_idx_offset + 2:
-                        summary_row_data["기권수"] = row_values_text[summary_idx_offset + 2]
-                    if len(row_values_text) > summary_idx_offset + 3: 
-                        summary_row_data["개표율"] = row_values_text[summary_idx_offset + 3]
-                    continue 
-
                 if not row_values_text or not row_values_text[0] or not row_values_text[1].replace(',','').isdigit():
-                    print(f"Skipping likely non-data/percentage row: {row_values_text}")
+                    print(f"Skipping non-data row or row with invalid 선거인수: {row_values_text}")
                     continue
                 
-                if len(row_values_text) < (3 + len(candidate_names) + 3): # 구시군명,선거인수,투표수 + 후보자수 + 후보자계,무효,기권
-                    print(f"Skipping row due to insufficient columns (expected at least {3 + len(candidate_names) + 3}): {row_values_text}")
+                # 컬럼 개수: 구시군명(1) + 선거인수(1) + 투표수(1) + 후보자수(N) + 후보자계(1) + 무효(1) + 기권(1) + 개표율(1) = N + 8
+                # 제공된 HTML 기준으로는 개표율까지 10개 컬럼 (후보자 3명일 때)
+                expected_min_cols = 3 + len(candidate_names) + 3 # 최소 (구시군,선거인,투표수 + 후보자N + 계,무효,기권)
+                if len(row_values_text) < expected_min_cols:
+                    print(f"Skipping sigungu row due to insufficient columns (expected at least {expected_min_cols}): {row_values_text}")
                     continue
 
                 entry = {}
@@ -296,12 +310,12 @@ def crawl_once():
                 entry["후보자계"] = row_values_text[current_idx]
                 entry["무효투표수"] = row_values_text[current_idx + 1]
                 entry["기권수"] = row_values_text[current_idx + 2]
-                # 개표율은 시군구별로 없을 수 있으므로, summary에서만 사용
-                
+                # 시군구별 개표율은 마지막 컬럼에 있을 수 있음
+                if len(row_values_text) > current_idx + 3:
+                     entry["개표율"] = row_values_text[current_idx + 3]
+
                 sigungu_data_list.append(entry)
 
-            if not summary_row_data:
-                print("Warning: Summary row (합계) not found or parsed. Some overall stats might be inaccurate.")
             if not sigungu_data_list:
                 raise ValueError("Parsing Error: No valid sigungu data rows processed after filtering.")
 
@@ -309,7 +323,7 @@ def crawl_once():
                 "timestamp": execution_timestamp, 
                 "candidates": candidate_names, 
                 "data": sigungu_data_list,
-                "summary": summary_row_data
+                "summary": summary_row_data 
             }
             print(f"Data prepared for Redis (timestamp: {execution_timestamp})")
             print(f"Candidate names for Redis: {candidate_names}")
@@ -376,3 +390,4 @@ if __name__ == "__main__":
     print(f"Starting crawl_once function at {script_start_time}...")
     crawl_once()
     print(f"crawl_once function finished at {time.strftime('%Y%m%d-%H%M%S')}.")
+
